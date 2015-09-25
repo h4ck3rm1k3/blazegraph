@@ -119,17 +119,17 @@ public class BigdataSailRemoteRepositoryConnectionTest extends TestCase {
 			tq.removeBinding("o");
 			assertFalse(tq.getBindings().hasBinding("o"));
 			
-			TupleQueryResult tqr = tq.evaluate();
-			try {
-				assertEquals(EncodeDecodeValue.encodeValue(s),remote.data.opts.getRequestParam("$s"));
-				assertEquals(EncodeDecodeValue.encodeValue(p),remote.data.opts.getRequestParam("$p"));
+		TupleQueryResult tqr = tq.evaluate();
+		try {
+			assertEquals(EncodeDecodeValue.encodeValue(s),remote.data.opts.getRequestParam("$s"));
+			assertEquals(EncodeDecodeValue.encodeValue(p),remote.data.opts.getRequestParam("$p"));
 				assertEquals(null,remote.data.opts.getRequestParam("$o"));
-				assertEquals(EncodeDecodeValue.encodeValue(s),remote.data.request.getParams().get("$s").getValue());
-				assertEquals(EncodeDecodeValue.encodeValue(p),remote.data.request.getParams().get("$p").getValue());
+			assertEquals(EncodeDecodeValue.encodeValue(s),remote.data.request.getParams().get("$s").getValue());
+			assertEquals(EncodeDecodeValue.encodeValue(p),remote.data.request.getParams().get("$p").getValue());
 				assertEquals(null,remote.data.request.getParams().get("$o"));
-			} finally {
-				tqr.close();
-			}
+		} finally {
+			tqr.close();
+		}
 			tq.clearBindings();
 			assertEquals(0,tq.getBindings().size());
 		}
@@ -193,7 +193,11 @@ public class BigdataSailRemoteRepositoryConnectionTest extends TestCase {
 
 	@Test
 	public void testGetStatements() throws RepositoryException {
+<<<<<<< HEAD
 		final RepositoryResult<Statement> stmts = con.getStatements(s, p, o, includeInferred, c);
+=======
+	    final RepositoryResult<Statement> stmts = con.getStatements(s, p, o, includeInferred, c);
+>>>>>>> BLAZEGRAPH_RELEASE_1_5_3
 		try {
 			assertEquals(EncodeDecodeValue.encodeValue(s), remote.data.opts.getRequestParam("s"));
 			assertEquals(EncodeDecodeValue.encodeValue(p), remote.data.opts.getRequestParam("p"));

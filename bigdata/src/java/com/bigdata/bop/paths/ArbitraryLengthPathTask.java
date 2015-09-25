@@ -27,10 +27,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 package com.bigdata.bop.paths;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Callable;
@@ -122,6 +124,7 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
     private Set<IVariable<?>> projectInVars;
     private final IVariableOrConstant<?> middleTerm;
     private final IVariable<?> edgeVar;
+    private final List<IVariable<?>> dropVars;
 
     public ArbitraryLengthPathTask(
             final ArbitraryLengthPathOp controllerOp,
@@ -232,6 +235,13 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
                         Annotations.DEFAULT_LOAD_FACTOR),//
                 ConcurrentHashMapAnnotations.DEFAULT_CONCURRENCY_LEVEL);
         
+        this.dropVars = (List<IVariable<?>>) controllerOp.getProperty(
+                Annotations.DROP_VARS, new ArrayList<IVariable<?>>());
+        
+        if (log.isDebugEnabled()) {
+            log.debug("vars to drop: " + dropVars);
+        }
+
     }
   
     @Override
@@ -437,9 +447,9 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
                 runningSubquery = queryEngine.eval(subquery, nextRoundInput
                         .toArray(new IBindingSet[nextRoundInput.size()]));
 
-                long subqueryChunksOut = 0L; // #of chunks read from
-                                             // subquery
-
+                long subqueryChunksOut = 0L; // #of chunks read from subquery
+                long subquerySolutionsOut = 0L; // #of solutions read from subquery
+                
                 try {
 
                     // Declare the child query to the parent.
@@ -457,6 +467,8 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
                         final IBindingSet[] chunk = subquerySolutionItr
                                 .next();
 
+                        subqueryChunksOut++;
+                        if (Thread.interrupted()) throw new InterruptedException();
                         for (IBindingSet bs : chunk) {
 
                             /**
@@ -465,7 +477,7 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
                              *      OutOfMemoryError instead of Timeout for
                              *      SPARQL Property Paths </a>
                              */
-                            if (subqueryChunksOut++ % 10 == 0
+                            if (subquerySolutionsOut++ % 10 == 0
                                     && Thread.interrupted()) {
                                 throw new InterruptedException();
                             }
@@ -547,35 +559,47 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
                                     bs.get(gearing.tVarOut));
                             input.clear(gearing.tVarOut);
 
-                            /*
-                             * We also have to filter out anonymous
-                             * variables introduced in this run, taking care
-                             * we do not remove potential anonymous
-                             * variables driving the evaluation.
-                             */
-                            @SuppressWarnings("rawtypes")
-                            final Iterator<IVariable> vit = input.vars();
-                            Set<IVariable<?>> anonymousVars = new LinkedHashSet<IVariable<?>>();
-                            while (vit.hasNext()) {
+//                            /*
+//                             * We also have to filter out anonymous
+//                             * variables introduced in this run, taking care
+//                             * we do not remove potential anonymous
+//                             * variables driving the evaluation.
+//                             */
+//                            @SuppressWarnings("rawtypes")
+//                            final Iterator<IVariable> vit = input.vars();
+//                            Set<IVariable<?>> anonymousVars = new LinkedHashSet<IVariable<?>>();
+//                            while (vit.hasNext()) {
+//
+//                                final IVariable<?> var = vit.next();
+//                                if (var.isAnonymous()
+//                                        && !var.equals(gearing.inVar)
+//                                        && !var.equals(gearing.tVarIn)) {
+//                                    anonymousVars.add(var);
+//                                }
+//                            }
+//
+//                            if (log.isDebugEnabled()) {
+//                                log.debug("anonymous vars: "
+//                                        + anonymousVars);
+//                            }
+//
+//                            for (IVariable<?> anonymousVar : anonymousVars) {
+//                                if (!projectInVars.contains(anonymousVar)
+//                                        && !varsToRetain
+//                                                .contains(anonymousVar)) {
+//                                    input.clear(anonymousVar);
+//                                }
+//                            }
 
-                                final IVariable<?> var = vit.next();
-                                if (var.isAnonymous()
+                            /*
+                             * Drop intermediate variables.
+                             */
+                            for (IVariable<?> var : dropVars) {
+                                if (!projectInVars.contains(var)
+                                     && !varsToRetain.contains(var)
                                         && !var.equals(gearing.inVar)
                                         && !var.equals(gearing.tVarIn)) {
-                                    anonymousVars.add(var);
-                                }
-                            }
-
-                            if (log.isDebugEnabled()) {
-                                log.debug("anonymous vars: "
-                                        + anonymousVars);
-                            }
-
-                            for (IVariable<?> anonymousVar : anonymousVars) {
-                                if (!projectInVars.contains(anonymousVar)
-                                        && !varsToRetain
-                                                .contains(anonymousVar)) {
-                                    input.clear(anonymousVar);
+                                    input.clear(var);
                                 }
                             }
 
@@ -623,26 +647,22 @@ public class ArbitraryLengthPathTask implements Callable<Void> {
 
             } catch (Throwable t) {
 
-                if (runningSubquery == null
-                        || runningSubquery.getCause() != null) {
-                    /*
-                     * If things fail before we start the subquery, or if a
-                     * subquery fails (due to abnormal termination), then
-                     * propagate the error to the parent and rethrow the
-                     * first cause error out of the subquery.
-                     * 
-                     * Note: IHaltable#getCause() considers exceptions
-                     * triggered by an interrupt to be normal termination.
-                     * Such exceptions are NOT propagated here and WILL NOT
-                     * cause the parent query to terminate.
-                     */
-                    throw new RuntimeException(
-                            ArbitraryLengthPathTask.this.context
-                                    .getRunningQuery().halt(
-                                            runningSubquery == null ? t
-                                                    : runningSubquery
-                                                            .getCause()));
-                }
+                /*
+                 * If things fail before we start the subquery, or if a subquery
+                 * fails (due to abnormal termination), then propagate the error
+                 * to the parent and rethrow the first cause error out of the
+                 * subquery.
+                 * 
+                 * Note: IHaltable#getCause() considers exceptions triggered by
+                 * an interrupt to be normal termination. Such exceptions are
+                 * NOT propagated here and WILL NOT cause the parent query to
+                 * terminate.
+                 */
+                final Throwable cause = (runningSubquery != null && runningSubquery
+                        .getCause() != null) ? runningSubquery.getCause() : t;
+
+                throw new RuntimeException(ArbitraryLengthPathTask.this.context
+                        .getRunningQuery().halt(cause));
 
             } finally {
 

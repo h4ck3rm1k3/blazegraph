@@ -55,7 +55,6 @@ import org.openrdf.query.GraphQueryResult;
 import org.openrdf.query.QueryEvaluationException;
 import org.openrdf.query.UpdateExecutionException;
 import org.openrdf.query.algebra.StatementPattern.Scope;
-import org.openrdf.query.impl.MutableTupleQueryResult;
 import org.openrdf.repository.RepositoryException;
 import org.openrdf.repository.RepositoryResult;
 import org.openrdf.rio.RDFFormat;
@@ -95,6 +94,7 @@ import com.bigdata.rdf.rio.IRDFParserOptions;
 import com.bigdata.rdf.sail.BigdataSail;
 import com.bigdata.rdf.sail.BigdataSail.BigdataSailConnection;
 import com.bigdata.rdf.sail.SPARQLUpdateEvent;
+import com.bigdata.rdf.sail.SPARQLUpdateEvent.DeleteInsertWhereStats;
 import com.bigdata.rdf.sail.Sesame2BigdataIterator;
 import com.bigdata.rdf.sail.webapp.client.MiniMime;
 import com.bigdata.rdf.sparql.ast.ASTContainer;
@@ -134,6 +134,7 @@ import com.bigdata.striterator.Chunkerator;
 import cutthecrap.utils.striterators.ICloseableIterator;
 import cutthecrap.utils.striterators.Resolver;
 import cutthecrap.utils.striterators.Striterator;
+import info.aduna.iteration.CloseableIteration;
 
 /**
  * Class handles SPARQL update query plan generation.
@@ -243,6 +244,8 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 
 //          log.error("\nbefore op=" + op + "\n" + context.conn.getTripleStore().dumpStore());
 
+			long connectionFlushNanos = 0L;
+			long batchResolveNanos = 0L;
 			if (updateIndex > 0) {
 
 				/*
@@ -258,7 +261,10 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 				 * 
 				 * @see https://sourceforge.net/apps/trac/bigdata/ticket/558
 				 */
+				final long t1 = System.nanoTime();
 				context.conn.flush();
+				final long t2 = System.nanoTime();
+				connectionFlushNanos = t2 - t1;
 
 				/*
 				 * We need to re-resolve any RDF Values appearing in this UPDATE
@@ -270,22 +276,23 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 				op = (Update) new ASTBatchResolveTermsOptimizer().optimize(context,
 				      new QueryNodeWithBindingSet(op, context.getBindings()))
 						.getQueryNode();
+				batchResolveNanos = System.nanoTime() - t2;
 
 			}
 			
 			final long begin = System.nanoTime();
-			
+			final DeleteInsertWhereStats deleteInsertWhereStats = new DeleteInsertWhereStats(); // @see BLZG-1446.
 			Throwable cause = null;
             try {
                 // convert/run the update operation.
-                left = convertUpdateSwitch(left, op, context);
+                left = convertUpdateSwitch(left, op, context, deleteInsertWhereStats);
             } catch (Throwable t) {
                 cause = t;
                 log.error("SPARQL UPDATE failure: op=" + op + ", ex=" + t, t);
                 // notify listener(s)
                 final long elapsed = System.nanoTime() - begin;
                 context.conn.getSailConnection().fireEvent(
-                        new SPARQLUpdateEvent(op, elapsed, cause));
+                        new SPARQLUpdateEvent(op, elapsed, connectionFlushNanos, batchResolveNanos, cause, deleteInsertWhereStats));
                 if (t instanceof Exception)
                     throw (Exception) t;
                 if (t instanceof RuntimeException)
@@ -297,7 +304,7 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 			
 			// notify listener(s)
             context.conn.getSailConnection().fireEvent(
-                    new SPARQLUpdateEvent(op, elapsed, cause));
+            		new SPARQLUpdateEvent(op, elapsed, connectionFlushNanos, batchResolveNanos, cause, deleteInsertWhereStats));
 
 			updateIndex++;
 			
@@ -386,7 +393,8 @@ public class AST2BOpUpdate extends AST2BOpUtility {
      * @throws Exception
      */
     private static PipelineOp convertUpdateSwitch(PipelineOp left,
-            final Update op, final AST2BOpUpdateContext context)
+            final Update op, final AST2BOpUpdateContext context,
+            final DeleteInsertWhereStats deleteInsertWhereStats)
             throws Exception {
 
         final UpdateType updateType = op.getUpdateType();
@@ -424,7 +432,7 @@ public class AST2BOpUpdate extends AST2BOpUtility {
             left = convertLoadGraph(left, (LoadGraph) op, context);
             break;
         case DeleteInsert:
-            left = convertDeleteInsert(left, (DeleteInsertGraph) op, context);
+            left = convertDeleteInsert(left, (DeleteInsertGraph) op, context, deleteInsertWhereStats);
             break;
         default:
             throw new UnsupportedOperationException("updateType=" + updateType);
@@ -452,7 +460,8 @@ public class AST2BOpUpdate extends AST2BOpUtility {
      * @throws SailException 
      */
     private static PipelineOp convertDeleteInsert(PipelineOp left,
-            final DeleteInsertGraph op, final AST2BOpUpdateContext context)
+            final DeleteInsertGraph op, final AST2BOpUpdateContext context,
+            final DeleteInsertWhereStats deleteInsertWhereStats)
             throws QueryEvaluationException, RepositoryException, SailException {
 
         if (runOnQueryEngine)
@@ -618,24 +627,28 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 				 * associated with the SailConnection in case the view is
 				 * isolated by a transaction.
 				 */
+
+				// Note: Blocks until the result set is materialized.
+				final long beginWhereClauseNanos = System.nanoTime();
+				final MutableTupleQueryResult result = new MutableTupleQueryResult(
+						ASTEvalHelper.evaluateTupleQuery(
+								context.conn.getTripleStore(), astContainer,
+								context.getQueryBindingSet()/* bindingSets */));
+				deleteInsertWhereStats.whereNanos.set(System.nanoTime() - beginWhereClauseNanos);
 				
 				// If the query contains a nativeDistinctSPO query hint then
 				// the line below unfortunately isolates the query so that the hint does
 				// not impact any other execution, this is hacked by putting a property on the query root.
 				
-				final MutableTupleQueryResult result = new MutableTupleQueryResult(
-						ASTEvalHelper.evaluateTupleQuery(
-								context.conn.getTripleStore(), astContainer,
-								context.getQueryBindingSet()/* bindingSets */));
-				
-				boolean nativeDistinct = astContainer.getOptimizedAST().getProperty(ConstructNode.Annotations.NATIVE_DISTINCT,
+				final boolean nativeDistinct = astContainer.getOptimizedAST().getProperty(ConstructNode.Annotations.NATIVE_DISTINCT,
 						ConstructNode.Annotations.DEFAULT_NATIVE_DISTINCT);
 
                 try {
 
                     // Play it once through the DELETE clause.
                     {
-
+                    	final long beginDeleteNanos = System.nanoTime();
+                    	
                         // rewind.
                         result.beforeFirst();
 
@@ -799,11 +812,15 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 
 						}
 
-					}
+						deleteInsertWhereStats.deleteNanos.set(System.nanoTime() - beginDeleteNanos);
+						
+					} // End DELETE clause.
 
                     // Play it once through the INSERT clause.
                     {
 
+                    	final long beginInsertNanos = System.nanoTime();
+                    	
                         // rewind.
                         result.beforeFirst();
 
@@ -875,7 +892,9 @@ public class AST2BOpUpdate extends AST2BOpUtility {
 
 						}
 
-					}
+						deleteInsertWhereStats.insertNanos.set(System.nanoTime() - beginInsertNanos);
+
+					} // End INSERT clause
 
                 } finally {
 
