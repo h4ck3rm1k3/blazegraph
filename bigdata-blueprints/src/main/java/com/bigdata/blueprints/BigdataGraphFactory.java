@@ -1,11 +1,11 @@
 /**
-Copyright (C) SYSTAP, LLC 2006-2015.  All rights reserved.
+Copyright (C) SYSTAP, LLC DBA Blazegraph 2006-2016.  All rights reserved.
 
 Contact:
-     SYSTAP, LLC
+     SYSTAP, LLC DBA Blazegraph
      2501 Calvert ST NW #106
      Washington, DC 20008
-     licenses@systap.com
+     licenses@blazegraph.com
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ import java.util.Properties;
 
 import com.bigdata.BigdataStatics;
 import com.bigdata.rdf.sail.BigdataSail;
+import com.bigdata.rdf.sail.BigdataSailRepository;
 import com.bigdata.rdf.sail.remote.BigdataSailFactory;
 
 
@@ -79,7 +80,7 @@ public class BigdataGraphFactory  {
      * a journal will be created at that location.
      */
     public static BigdataGraph open(final String file, final boolean create) throws Exception {
-        final BigdataSail sail = BigdataSailFactory.openSail(file, create);
+        final BigdataSail sail = (BigdataSail) BigdataSailFactory.openSail(file, create);
         sail.initialize();
         return new BigdataGraphEmbedded(sail);
     }
@@ -90,7 +91,7 @@ public class BigdataGraphFactory  {
 	 * location.
 	 */
     public static BigdataGraph create(final String file) throws Exception {
-        final BigdataSail sail = BigdataSailFactory.openSail(file, true);
+        final BigdataSail sail = (BigdataSail) BigdataSailFactory.openSail(file, true);
         sail.initialize();
         return new BigdataGraphEmbedded(sail);
     }
@@ -117,7 +118,7 @@ public class BigdataGraphFactory  {
      */
     public static BigdataGraph create(final BlueprintsValueFactory vf, 
             final Properties props) throws Exception {
-        final BigdataSail sail = BigdataSailFactory.createSail();
+        final BigdataSail sail = (BigdataSail) BigdataSailFactory.createSail();
         sail.initialize();
         return new BigdataGraphEmbedded(sail, vf, props);
     }

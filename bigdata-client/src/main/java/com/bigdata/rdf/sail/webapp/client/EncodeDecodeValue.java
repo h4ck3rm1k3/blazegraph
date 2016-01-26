@@ -1,12 +1,12 @@
 /**
 
-Copyright (C) SYSTAP, LLC 2006-2015.  All rights reserved.
+Copyright (C) SYSTAP, LLC DBA Blazegraph 2006-2016.  All rights reserved.
 
 Contact:
-     SYSTAP, LLC
+     SYSTAP, LLC DBA Blazegraph
      2501 Calvert ST NW #106
      Washington, DC 20008
-     licenses@systap.com
+     licenses@blazegraph.com
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,8 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 package com.bigdata.rdf.sail.webapp.client;
 
-import java.util.ArrayList;
-
 import org.openrdf.model.BNode;
 import org.openrdf.model.Literal;
 import org.openrdf.model.Resource;
@@ -36,8 +34,6 @@ import org.openrdf.model.URI;
 import org.openrdf.model.Value;
 import org.openrdf.model.impl.LiteralImpl;
 import org.openrdf.model.impl.URIImpl;
-
-import com.bigdata.rdf.store.BD;
 
 /**
  * Utility class to encode/decode RDF {@link Value}s for interchange with the
@@ -444,7 +440,7 @@ public class EncodeDecodeValue {
     * @throws IllegalArgumentException
     *            if the argument is <code>null</code>.
     * 
-    * @see BD#NULL_GRAPH
+    * @see com.bigdata.rdf.store.BD;#NULL_GRAPH
     * 
     * @see <a href="http://trac.bigdata.com/ticket/1177"> Resource... contexts
     *      not encoded/decoded according to openrdf semantics (REST API) </a>
@@ -509,7 +505,7 @@ public class EncodeDecodeValue {
     * @throws IllegalArgumentException
     *            if the argument is <code>null</code>.
     * 
-    * @see BD#NULL_GRAPH
+    * @see com.bigdata.rdf.store.BD;#NULL_GRAPH
     * 
     * @see <a href="http://trac.bigdata.com/ticket/1177"> Resource... contexts
     *      not encoded/decoded according to openrdf semantics (REST API) </a>

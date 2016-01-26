@@ -1,12 +1,12 @@
 /**
 
-Copyright (C) SYSTAP, LLC 2006-2015.  All rights reserved.
+Copyright (C) SYSTAP, LLC DBA Blazegraph 2006-2016.  All rights reserved.
 
 Contact:
-     SYSTAP, LLC
+     SYSTAP, LLC DBA Blazegraph
      2501 Calvert ST NW #106
      Washington, DC 20008
-     licenses@systap.com
+     licenses@blazegraph.com
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,7 +36,7 @@ import org.eclipse.jetty.client.AsyncContentProvider;
 import org.eclipse.jetty.client.api.ContentProvider;
 import org.eclipse.jetty.util.B64Code;
 
-import com.bigdata.btree.BytesUtil;
+import com.bigdata.util.BytesUtil;
 
 public class MultipartContentProvider implements AsyncContentProvider {
 	
