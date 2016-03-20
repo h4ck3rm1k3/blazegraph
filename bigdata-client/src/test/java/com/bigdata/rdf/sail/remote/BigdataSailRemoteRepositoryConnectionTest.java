@@ -193,11 +193,7 @@ public class BigdataSailRemoteRepositoryConnectionTest extends TestCase {
 
 	@Test
 	public void testGetStatements() throws RepositoryException {
-<<<<<<< HEAD
-		final RepositoryResult<Statement> stmts = con.getStatements(s, p, o, includeInferred, c);
-=======
-	    final RepositoryResult<Statement> stmts = con.getStatements(s, p, o, includeInferred, c);
->>>>>>> BLAZEGRAPH_RELEASE_1_5_3
+  	    final RepositoryResult<Statement> stmts = con.getStatements(s, p, o, includeInferred, c);
 		try {
 			assertEquals(EncodeDecodeValue.encodeValue(s), remote.data.opts.getRequestParam("s"));
 			assertEquals(EncodeDecodeValue.encodeValue(p), remote.data.opts.getRequestParam("p"));
